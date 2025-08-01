@@ -32,8 +32,8 @@ def handle_price_update(data):
                     rsi_cache[key] = []
                 rsi_cache[key].append((interval_start, rsi_val))
                 # Giới hạn
-                if len(rsi_cache[key]) > 500:
-                    rsi_cache[key] = rsi_cache[key][-500:]
+                if len(rsi_cache[key]) > 100:
+                    rsi_cache[key] = rsi_cache[key][-100:]
 
     # Ghi ra file định kỳ (hoặc debounce sau này)
     save_rsi_cache_to_file(rsi_cache)

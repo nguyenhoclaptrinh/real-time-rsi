@@ -11,24 +11,13 @@ function saveChartsToStorage() {
 async function restoreChartsFromStorage() {
   const saved = localStorage.getItem("activeCharts");
   if (!saved) return;
+
   const keys = JSON.parse(saved);
 
-  const res = await fetch("/rsi_data?interval=60");
-  const allRSIData = await res.json();
-
-  keys.forEach(key => {
+  for (const key of keys) {
     const [token, interval] = key.split("_");
-    const chart = addRSIChart(token, parseInt(interval));
-    const rsiList = allRSIData[token]?.[`rsi_${interval}s`];
-
-    if (chart && rsiList) {
-      for (const [ts, val] of rsiList) {
-        chart.data.labels.push(new Date(ts * 1000).toLocaleTimeString());
-        chart.data.datasets[0].data.push(val);
-      }
-      chart.update();
-    }
-  });
+    await addRSIChart(token, parseInt(interval));  // await để vẽ tuần tự
+  }
 }
 
 async function loadHistoryAndDraw(token, interval, chart) {
@@ -38,10 +27,11 @@ async function loadHistoryAndDraw(token, interval, chart) {
 
     if (!Array.isArray(history)) return;
 
-    history.forEach(item => {
-      chart.data.labels.push(new Date(item.t * 1000).toLocaleTimeString());
-      chart.data.datasets[0].data.push(item.rsi);
-    });
+    for (const [ts, val] of history) {
+      const label = new Date(ts * 1000).toLocaleTimeString();
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(val);
+    }
 
     chart.update();
   } catch (err) {
@@ -49,6 +39,49 @@ async function loadHistoryAndDraw(token, interval, chart) {
   }
 }
 
+
+
+// Tạo chart object riêng biệt
+function createEmptyRSIChart(token, interval) {
+  const key = `${token}_${interval}`;
+  const container = document.getElementById("rsiCharts");
+
+  const chartDiv = document.createElement("div");
+  chartDiv.className = "rsi-card";
+  chartDiv.id = `chart-${key}`;
+  chartDiv.innerHTML = `
+    <h4>${token} - RSI ${interval}s 
+      <button onclick="removeChart('${key}')">❌</button>
+    </h4>
+    <canvas id="canvas-${key}" height="100"></canvas>
+  `;
+  container.appendChild(chartDiv);
+
+  const ctx = document.getElementById(`canvas-${key}`).getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'RSI14',
+        data: [],
+        borderColor: getRandomColor(),
+        tension: 0.2
+      }]
+    },
+    options: {
+      animation: false,
+      scales: {
+        y: {
+          min: 0,
+          max: 100
+        }
+      }
+    }
+  });
+
+  return chart;
+}
 
 // Hàm cập nhật chart
 async function updateRSIChart(token, interval, chart) {
@@ -79,56 +112,26 @@ async function updateRSIChart(token, interval, chart) {
 }
 
 // Hàm thêm chart mới
-function addRSIChart(token, interval = 60) {
+async function addRSIChart(token, interval = 60) {
   const key = `${token}_${interval}`;
-  
-  // Không tạo thêm nếu đã tồn tại cặp đó
-  if (activeCharts[key]) {
-    return;
-  }
+  if (activeCharts[key]) return;
 
-  // Tạo HTML element
-  const container = document.getElementById("rsiCharts");
-  const chartDiv = document.createElement("div");
-  chartDiv.className = "rsi-card";
-  chartDiv.id = `chart-${key}`;
-  chartDiv.innerHTML = `
-    <h4>${token} - RSI ${interval}s 
-      <button onclick="removeChart('${key}')">❌</button>
-    </h4>
-    <canvas id="canvas-${key}" height="100"></canvas>
-  `;
-  container.appendChild(chartDiv);
+  const chart = createEmptyRSIChart(token, interval);
+  activeCharts[key] = { chart, timerId: null }; // Khởi tạo trước
 
-  // Khởi tạo Chart.js
-  const ctx = document.getElementById(`canvas-${key}`).getContext('2d');
-  const chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'RSI14',
-        data: [],
-        borderColor: getRandomColor(),
-        tension: 0.2
-      }]
-    },
-    options: { /*...*/ }
-  });
+  await loadHistoryAndDraw(token, interval, chart); // Đợi vẽ dữ liệu history
 
-  loadHistoryAndDraw(token, interval, chart);
-
-  // Bắt đầu cập nhật định kỳ
-  updateRSIChart(token, interval, chart); // Lần đầu
   const timerId = setInterval(
     () => updateRSIChart(token, interval, chart),
     interval * 1000
   );
 
-  activeCharts[key] = { chart, timerId };
+  activeCharts[key].timerId = timerId;
   saveChartsToStorage();
+
   return chart;
 }
+
 
 // Hàm phụ trợ tạo màu ngẫu nhiên
 function getRandomColor() {

@@ -9,33 +9,26 @@ import json
 
 bp = Blueprint("rsi", __name__)
 
-@bp.route("/rsi_data")
-def rsi_data():
-    interval = int(request.args.get("interval", 60))
-    all_data = load_rsi_cache_from_file()
-    result = {}
-
-    for key, rsi_list in all_data.items():
-        if not key.endswith(f"_{interval}"):
-            continue
-        token = key.rsplit("_", 1)[0]
-        result[token] = {
-            f"rsi_{interval}s": rsi_list[-100:]  # Lấy 100 điểm cuối
-        }
-    return jsonify(result)
-
 @bp.route("/rsi_history")
 def get_rsi_history():
     token = request.args.get("token")
-    interval = request.args.get("interval")
-    filename = f"rsi_data/{token.replace('/', '')}_{interval}s.json"
+    interval = request.args.get("interval") # Đây là string, cần chuyển sang int nếu dùng trong key
+    
+    if not token or not interval:
+        return jsonify([]) # Trả về rỗng nếu thiếu tham số
 
-    if not os.path.exists(filename):
-        return jsonify([])
+    key = f"{token.upper()}_{interval}" # Tạo key khớp với rsi_cache
+    
+    all_data = load_rsi_cache_from_file() # Tải toàn bộ cache từ file
 
-    with open(filename, "r") as f:
-        return jsonify(json.load(f))
-
+    # Lấy dữ liệu lịch sử cho token và interval cụ thể
+    # rsi_cache lưu trữ dưới dạng [(timestamp, rsi_value), ...]
+    history_list = all_data.get(key, [])
+    
+    # Chỉ trả về 100 điểm cuối cùng
+    # (Nếu bạn muốn trả full data cho history, bỏ [-100:] đi)
+    print(history_list)
+    return jsonify(history_list[-100:]) 
 
 @bp.route("/unsubscribe")
 def unsubscribe():
